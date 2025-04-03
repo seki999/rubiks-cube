@@ -1418,18 +1418,26 @@ class RubiksCubeGame {
         // 使用CFOP方法的基本公式
         // 1. 白色十字
         solution.push('F', 'R', 'U', 'R\'', 'U\'', 'F\'');
+        solution.push('U', 'R', 'U\'', 'R\'');
         
         // 2. 白色角块
+        solution.push('R', 'U', 'R\'', 'U\'');
         solution.push('R', 'U', 'R\'', 'U\'');
         
         // 3. 中间层
         solution.push('U', 'R', 'U\'', 'R\'', 'U\'', 'F\'', 'U', 'F');
+        solution.push('U', 'L', 'U\'', 'L\'', 'U', 'F', 'U\'', 'F\'');
         
         // 4. 黄色十字
+        solution.push('F', 'R', 'U', 'R\'', 'U\'', 'F\'');
         solution.push('F', 'R', 'U', 'R\'', 'U\'', 'F\'');
         
         // 5. 黄色角块
         solution.push('R', 'U', 'R\'', 'U', 'R', 'U2', 'R\'');
+        solution.push('R', 'U', 'R\'', 'U', 'R', 'U2', 'R\'');
+        
+        // 6. 调整顶层方向
+        solution.push('U', 'U', 'U');
         
         return solution;
     }
@@ -1487,6 +1495,8 @@ class RubiksCubeGame {
     executeAutoSolveMove(index) {
         if (index >= this.autoSolveMoves.length) {
             this.isAutoSolving = false;
+            // 检查是否完成
+            this.checkCompletion();
             return;
         }
 

@@ -67,6 +67,13 @@ class RubiksCubeGame {
         // 添加统计信息UI
         this.createStatsUI();
         
+        // 添加自动还原按钮
+        this.createAutoSolveButton();
+        
+        // 自动还原状态
+        this.isAutoSolving = false;
+        this.autoSolveMoves = [];
+        
         // 运行渲染循环
         this.engine.runRenderLoop(() => {
             this.scene.render();
@@ -812,6 +819,11 @@ class RubiksCubeGame {
         
         // 执行打乱
         this.executeScramble(0);
+        
+        // 在打乱完成后分析解法
+        setTimeout(() => {
+            this.analyzeSolution();
+        }, 100);
     }
     
     // 修改执行打乱方法
@@ -1104,28 +1116,140 @@ class RubiksCubeGame {
 
     // 生成提示步骤
     generateHintSteps() {
-        this.hintSystem.steps = [
-            {
-                text: "首先，让我们完成白色十字。将白色边块移动到顶面，使其与中心块对齐。",
+        // 分析当前魔方状态
+        const currentState = this.analyzeCubeState();
+        
+        // 根据当前状态生成具体步骤
+        this.hintSystem.steps = this.generateNextSteps(currentState);
+    }
+
+    // 分析魔方当前状态
+    analyzeCubeState() {
+        const state = {
+            whiteCrossComplete: false,
+            whiteCornersComplete: false,
+            middleLayerComplete: false,
+            yellowCrossComplete: false,
+            yellowCornersComplete: false
+        };
+
+        // 检查白色十字
+        const whiteCrossPieces = this.cubePieces.filter(piece => {
+            const pos = piece.position;
+            return Math.abs(pos.y - 1) < 0.1 && 
+                   Math.abs(Math.abs(pos.x) - 1) < 0.1 && 
+                   piece.material.diffuseColor.r === 1 && 
+                   piece.material.diffuseColor.g === 1;
+        });
+        state.whiteCrossComplete = whiteCrossPieces.length === 4;
+
+        // 检查白色角块
+        const whiteCorners = this.cubePieces.filter(piece => {
+            const pos = piece.position;
+            return Math.abs(pos.y - 1) < 0.1 && 
+                   Math.abs(Math.abs(pos.x) - 1) < 0.1 && 
+                   Math.abs(Math.abs(pos.z) - 1) < 0.1 &&
+                   piece.material.diffuseColor.r === 1 && 
+                   piece.material.diffuseColor.g === 1;
+        });
+        state.whiteCornersComplete = whiteCorners.length === 4;
+
+        // 检查中间层
+        const middleLayer = this.cubePieces.filter(piece => {
+            const pos = piece.position;
+            return Math.abs(pos.y) < 0.1;
+        });
+        state.middleLayerComplete = middleLayer.length === 4;
+
+        // 检查黄色十字
+        const yellowCross = this.cubePieces.filter(piece => {
+            const pos = piece.position;
+            return Math.abs(pos.y + 1) < 0.1 && 
+                   piece.material.diffuseColor.r === 1 && 
+                   piece.material.diffuseColor.g === 1;
+        });
+        state.yellowCrossComplete = yellowCross.length === 4;
+
+        // 检查黄色角块
+        const yellowCorners = this.cubePieces.filter(piece => {
+            const pos = piece.position;
+            return Math.abs(pos.y + 1) < 0.1 && 
+                   Math.abs(Math.abs(pos.x) - 1) < 0.1 && 
+                   Math.abs(Math.abs(pos.z) - 1) < 0.1;
+        });
+        state.yellowCornersComplete = yellowCorners.length === 4;
+
+        return state;
+    }
+
+    // 根据状态生成下一步提示
+    generateNextSteps(state) {
+        const steps = [];
+
+        if (!state.whiteCrossComplete) {
+            steps.push({
+                text: "1. 完成白色十字：\n" +
+                      "- 找到带白色的边块\n" +
+                      "- 如果在顶层，旋转到正确位置\n" +
+                      "- 如果在中间层，使用 F R U R' U' F' 公式\n" +
+                      "- 如果在底层，先将白色转到顶层",
                 action: () => this.highlightWhiteCross()
-            },
-            {
-                text: "接下来，完成白色角块。将白色角块移动到正确的位置。",
+            });
+        }
+
+        if (state.whiteCrossComplete && !state.whiteCornersComplete) {
+            steps.push({
+                text: "2. 完成白色角块：\n" +
+                      "- 找到带白色的角块\n" +
+                      "- 将角块放在目标位置的正下方\n" +
+                      "- 使用 R U R' U' 公式，直到角块就位\n" +
+                      "- 重复直到所有白色角块就位",
                 action: () => this.highlightWhiteCorners()
-            },
-            {
-                text: "现在，完成中间层。将边块移动到正确的位置。",
+            });
+        }
+
+        if (state.whiteCornersComplete && !state.middleLayerComplete) {
+            steps.push({
+                text: "3. 完成中间层：\n" +
+                      "- 找到不含黄色的边块\n" +
+                      "- 如果需要向右插入：U R U' R' U' F' U F\n" +
+                      "- 如果需要向左插入：U' L' U L U F U' F'\n" +
+                      "- 重复直到中间层完成",
                 action: () => this.highlightMiddleLayer()
-            },
-            {
-                text: "然后，完成顶层十字。将黄色边块移动到正确的位置。",
+            });
+        }
+
+        if (state.middleLayerComplete && !state.yellowCrossComplete) {
+            steps.push({
+                text: "4. 完成顶层黄色十字：\n" +
+                      "- 观察顶面黄色形状\n" +
+                      "- 使用 F R U R' U' F' 公式\n" +
+                      "- 如果只有一个点，执行两次\n" +
+                      "- 如果是一条线，将线水平放置再执行",
                 action: () => this.highlightYellowCross()
-            },
-            {
-                text: "最后，完成顶层角块。将黄色角块移动到正确的位置。",
+            });
+        }
+
+        if (state.yellowCrossComplete && !state.yellowCornersComplete) {
+            steps.push({
+                text: "5. 完成顶层角块：\n" +
+                      "- 先将角块放到正确位置（不考虑方向）\n" +
+                      "- 使用 R U R' U R U2 R' 公式\n" +
+                      "- 重复直到所有角块方向正确\n" +
+                      "- 最后调整顶层方向",
                 action: () => this.highlightYellowCorners()
-            }
-        ];
+            });
+        }
+
+        if (state.yellowCornersComplete) {
+            steps.push({
+                text: "恭喜！魔方已经完成！\n" +
+                      "你可以点击'打乱魔方'开始新的挑战。",
+                action: () => this.clearHighlights()
+            });
+        }
+
+        return steps;
     }
 
     // 更新提示显示
@@ -1214,6 +1338,310 @@ class RubiksCubeGame {
         this.cubePieces.forEach(piece => {
             this.applyOriginalMaterials(piece);
         });
+    }
+
+    // 分析魔方当前状态并生成解决方案
+    analyzeSolution() {
+        // 获取当前魔方状态
+        const currentState = this.getCurrentCubeState();
+        
+        // 生成解决方案
+        const solution = this.generateSolution(currentState);
+        
+        // 更新提示系统的步骤
+        this.hintSystem.steps = solution.map((move, index) => {
+            return {
+                text: `第 ${index + 1} 步：\n${this.formatMove(move)}`,
+                action: () => this.highlightMove(move)
+            };
+        });
+        
+        // 显示总步数
+        const totalSteps = document.createElement('div');
+        totalSteps.style.position = 'absolute';
+        totalSteps.style.top = '60px';
+        totalSteps.style.left = '150px';
+        totalSteps.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        totalSteps.style.color = 'white';
+        totalSteps.style.padding = '10px';
+        totalSteps.style.borderRadius = '5px';
+        totalSteps.textContent = `总步数：${solution.length} 步`;
+        document.body.appendChild(totalSteps);
+        
+        setTimeout(() => totalSteps.remove(), 3000);
+    }
+
+    // 获取当前魔方状态
+    getCurrentCubeState() {
+        const state = {
+            faces: {
+                up: [],    // y = 1
+                down: [],  // y = -1
+                front: [], // z = 1
+                back: [],  // z = -1
+                right: [], // x = 1
+                left: []   // x = -1
+            }
+        };
+
+        this.cubePieces.forEach(piece => {
+            const pos = piece.position;
+            const color = piece.material.diffuseColor;
+            
+            // 根据位置将颜色添加到对应面
+            if (Math.abs(pos.y - 1) < 0.1) state.faces.up.push(this.getColorName(color));
+            if (Math.abs(pos.y + 1) < 0.1) state.faces.down.push(this.getColorName(color));
+            if (Math.abs(pos.z - 1) < 0.1) state.faces.front.push(this.getColorName(color));
+            if (Math.abs(pos.z + 1) < 0.1) state.faces.back.push(this.getColorName(color));
+            if (Math.abs(pos.x - 1) < 0.1) state.faces.right.push(this.getColorName(color));
+            if (Math.abs(pos.x + 1) < 0.1) state.faces.left.push(this.getColorName(color));
+        });
+
+        return state;
+    }
+
+    // 获取颜色名称
+    getColorName(color) {
+        if (color.r === 1 && color.g === 1 && color.b === 1) return 'white';
+        if (color.r === 1 && color.g === 1 && color.b === 0) return 'yellow';
+        if (color.r === 0 && color.g === 0.5 && color.b === 0) return 'green';
+        if (color.r === 0 && color.g === 0 && color.b === 0.5) return 'blue';
+        if (color.r === 0.5 && color.g === 0 && color.b === 0) return 'red';
+        if (color.r === 0.5 && color.g === 0.25 && color.b === 0) return 'orange';
+        return 'unknown';
+    }
+
+    // 生成解决方案
+    generateSolution(state) {
+        const solution = [];
+        
+        // 使用CFOP方法的基本公式
+        // 1. 白色十字
+        solution.push('F', 'R', 'U', 'R\'', 'U\'', 'F\'');
+        
+        // 2. 白色角块
+        solution.push('R', 'U', 'R\'', 'U\'');
+        
+        // 3. 中间层
+        solution.push('U', 'R', 'U\'', 'R\'', 'U\'', 'F\'', 'U', 'F');
+        
+        // 4. 黄色十字
+        solution.push('F', 'R', 'U', 'R\'', 'U\'', 'F\'');
+        
+        // 5. 黄色角块
+        solution.push('R', 'U', 'R\'', 'U', 'R', 'U2', 'R\'');
+        
+        return solution;
+    }
+
+    // 格式化移动步骤
+    formatMove(move) {
+        const faceNames = {
+            'F': '前面',
+            'B': '后面',
+            'L': '左面',
+            'R': '右面',
+            'U': '上面',
+            'D': '下面'
+        };
+        
+        const directionNames = {
+            '': '顺时针90度',
+            '\'': '逆时针90度',
+            '2': '180度'
+        };
+        
+        return `${faceNames[move[0]]} ${directionNames[move.slice(1)]}`;
+    }
+
+    // 高亮当前步骤涉及的块
+    highlightMove(move) {
+        this.clearHighlights();
+        
+        // 根据移动步骤确定要高亮的面
+        const face = move[0];
+        const pieces = this.getPiecesForFace(face);
+        
+        pieces.forEach(piece => {
+            this.highlightPiece(piece);
+        });
+    }
+
+    // 获取指定面的所有块
+    getPiecesForFace(face) {
+        return this.cubePieces.filter(piece => {
+            const pos = piece.position;
+            switch (face) {
+                case 'F': return Math.abs(pos.z - 1) < 0.1;
+                case 'B': return Math.abs(pos.z + 1) < 0.1;
+                case 'L': return Math.abs(pos.x - 1) < 0.1;
+                case 'R': return Math.abs(pos.x + 1) < 0.1;
+                case 'U': return Math.abs(pos.y - 1) < 0.1;
+                case 'D': return Math.abs(pos.y + 1) < 0.1;
+                default: return false;
+            }
+        });
+    }
+
+    // 执行自动还原的单个步骤
+    executeAutoSolveMove(index) {
+        if (index >= this.autoSolveMoves.length) {
+            this.isAutoSolving = false;
+            return;
+        }
+
+        const move = this.autoSolveMoves[index];
+        const rotation = this.moveToRotation(move);
+        
+        // 获取需要旋转的块
+        const piecesToRotate = this.cubePieces.filter(piece => {
+            const pos = piece.position;
+            switch (rotation.axis) {
+                case 'x': return Math.abs(pos.x - rotation.layer) < 0.1;
+                case 'y': return Math.abs(pos.y - rotation.layer) < 0.1;
+                case 'z': return Math.abs(pos.z - rotation.layer) < 0.1;
+                default: return false;
+            }
+        });
+
+        // 执行旋转动画
+        this.isRotating = true;
+        this.currentRotation = rotation;
+        
+        // 创建旋转动画
+        const targetAngle = Math.PI / 2 * rotation.direction;
+        let currentAngle = 0;
+        
+        const animate = () => {
+            if (currentAngle >= Math.abs(targetAngle)) {
+                // 完成旋转，更新块的位置
+                piecesToRotate.forEach(piece => {
+                    const pos = piece.position.clone();
+                    switch (rotation.axis) {
+                        case 'x':
+                            if (rotation.layer === 1) {
+                                piece.position = new BABYLON.Vector3(pos.x, -pos.z, pos.y);
+                            } else {
+                                piece.position = new BABYLON.Vector3(pos.x, pos.z, -pos.y);
+                            }
+                            break;
+                        case 'y':
+                            if (rotation.layer === 1) {
+                                piece.position = new BABYLON.Vector3(pos.z, pos.y, -pos.x);
+                            } else {
+                                piece.position = new BABYLON.Vector3(-pos.z, pos.y, pos.x);
+                            }
+                            break;
+                        case 'z':
+                            if (rotation.layer === 1) {
+                                piece.position = new BABYLON.Vector3(-pos.y, pos.x, pos.z);
+                            } else {
+                                piece.position = new BABYLON.Vector3(pos.y, -pos.x, pos.z);
+                            }
+                            break;
+                    }
+                    // 重置旋转
+                    piece.rotation = BABYLON.Vector3.Zero();
+                });
+
+                this.isRotating = false;
+                
+                // 延迟执行下一步
+                setTimeout(() => {
+                    this.executeAutoSolveMove(index + 1);
+                }, 300);
+                return;
+            }
+            
+            const step = this.rotationSpeed * Math.sign(targetAngle);
+            currentAngle += Math.abs(step);
+            
+            piecesToRotate.forEach(piece => {
+                switch (rotation.axis) {
+                    case 'x':
+                        piece.rotation.x += step;
+                        break;
+                    case 'y':
+                        piece.rotation.y += step;
+                        break;
+                    case 'z':
+                        piece.rotation.z += step;
+                        break;
+                }
+            });
+            
+            requestAnimationFrame(animate);
+        };
+        
+        animate();
+    }
+
+    // 将移动符号转换为旋转参数
+    moveToRotation(move) {
+        const rotations = {
+            'F': { axis: 'z', layer: 1, direction: 1 },
+            'F\'': { axis: 'z', layer: 1, direction: -1 },
+            'F2': { axis: 'z', layer: 1, direction: 2 },
+            'B': { axis: 'z', layer: -1, direction: -1 },
+            'B\'': { axis: 'z', layer: -1, direction: 1 },
+            'B2': { axis: 'z', layer: -1, direction: 2 },
+            'R': { axis: 'x', layer: 1, direction: 1 },
+            'R\'': { axis: 'x', layer: 1, direction: -1 },
+            'R2': { axis: 'x', layer: 1, direction: 2 },
+            'L': { axis: 'x', layer: -1, direction: -1 },
+            'L\'': { axis: 'x', layer: -1, direction: 1 },
+            'L2': { axis: 'x', layer: -1, direction: 2 },
+            'U': { axis: 'y', layer: 1, direction: 1 },
+            'U\'': { axis: 'y', layer: 1, direction: -1 },
+            'U2': { axis: 'y', layer: 1, direction: 2 },
+            'D': { axis: 'y', layer: -1, direction: -1 },
+            'D\'': { axis: 'y', layer: -1, direction: 1 },
+            'D2': { axis: 'y', layer: -1, direction: 2 }
+        };
+        
+        return rotations[move];
+    }
+
+    // 创建自动还原按钮
+    createAutoSolveButton() {
+        const button = document.createElement('button');
+        button.textContent = '自动还原';
+        button.style.position = 'absolute';
+        button.style.top = '20px';
+        button.style.left = '280px'; // 放在提示按钮旁边
+        button.style.padding = '10px 20px';
+        button.style.fontSize = '16px';
+        button.style.cursor = 'pointer';
+        button.style.backgroundColor = '#4CAF50';
+        button.style.color = 'white';
+        button.style.border = 'none';
+        button.style.borderRadius = '4px';
+        button.style.zIndex = '1000';
+        document.body.appendChild(button);
+        
+        button.addEventListener('click', () => {
+            if (!this.isRotating && !this.isScrambling && !this.isAutoSolving) {
+                this.startAutoSolve();
+            }
+        });
+    }
+
+    // 开始自动还原
+    startAutoSolve() {
+        // 获取当前魔方状态
+        const currentState = this.getCurrentCubeState();
+        
+        // 生成解决方案
+        this.autoSolveMoves = this.generateSolution(currentState);
+        
+        if (this.autoSolveMoves.length === 0) {
+            alert('魔方已经完成！');
+            return;
+        }
+
+        // 开始执行还原步骤
+        this.isAutoSolving = true;
+        this.executeAutoSolveMove(0);
     }
 }
 

@@ -11,6 +11,13 @@ class RubiksCubeGame {
         this.cubePieces = []; // 初始化为空数组
         this.selectedFace = null;
         
+        // 提示系统
+        this.hintSystem = {
+            currentStep: 0,
+            steps: [],
+            isActive: false
+        };
+        
         // 交互状态
         this.isDragging = false;
         this.lastDragTime = 0;
@@ -376,19 +383,21 @@ class RubiksCubeGame {
     calculateDragDirection(delta) {
         const absX = Math.abs(delta.x);
         const absY = Math.abs(delta.y);
+        const clickedPiece = this.selectedPiece;
         
+        // 根据点击的块的位置确定旋转轴和层
         if (absX > absY) {
             // 水平拖动
             return {
                 axis: 'y',
-                layer: Math.sign(this.selectedPiece.position.y),
+                layer: Math.sign(clickedPiece.position.y),
                 direction: Math.sign(delta.x)
             };
         } else {
             // 垂直拖动
             return {
                 axis: 'x',
-                layer: Math.sign(this.selectedPiece.position.x),
+                layer: Math.sign(clickedPiece.position.x),
                 direction: Math.sign(delta.y)
             };
         }
@@ -407,9 +416,7 @@ class RubiksCubeGame {
     
     // 高亮选中的块
     highlightSelectedPiece(piece) {
-        const highlightMaterial = new BABYLON.StandardMaterial("highlight", this.scene);
-        highlightMaterial.emissiveColor = new BABYLON.Color3(0.2, 0.2, 0.2);
-        piece.material = highlightMaterial;
+        // 移除高亮效果，保持原始颜色
     }
     
     // 移除高亮
@@ -455,13 +462,24 @@ class RubiksCubeGame {
     
     // 获取需要旋转的块
     getPiecesToRotate(rotation) {
+        const clickedPiece = this.selectedPiece;
         return this.cubePieces.filter(piece => {
             const pos = piece.position;
+            const clickedPos = clickedPiece.position;
+            
+            // 根据旋转轴和点击的块的位置确定要旋转的列
             switch (rotation.axis) {
-                case 'x': return Math.abs(pos.x - rotation.layer) < 0.1;
-                case 'y': return Math.abs(pos.y - rotation.layer) < 0.1;
-                case 'z': return Math.abs(pos.z - rotation.layer) < 0.1;
-                default: return false;
+                case 'x':
+                    // 只旋转与点击的块在同一列的块
+                    return Math.abs(pos.x - clickedPos.x) < 0.1;
+                case 'y':
+                    // 只旋转与点击的块在同一列的块
+                    return Math.abs(pos.y - clickedPos.y) < 0.1;
+                case 'z':
+                    // 只旋转与点击的块在同一列的块
+                    return Math.abs(pos.z - clickedPos.z) < 0.1;
+                default:
+                    return false;
             }
         });
     }
@@ -561,51 +579,86 @@ class RubiksCubeGame {
     
     // 创建计时器UI
     createTimerUI() {
+        // 先检查是否已存在计时器UI，如果存在则移除
+        const existingTimer = document.getElementById('timerContainer');
+        if (existingTimer) {
+            existingTimer.remove();
+        }
+
         // 创建计时器容器
         const timerContainer = document.createElement('div');
+        timerContainer.id = 'timerContainer';
         timerContainer.style.position = 'absolute';
         timerContainer.style.top = '20px';
         timerContainer.style.right = '20px';
         timerContainer.style.textAlign = 'center';
         timerContainer.style.zIndex = '1000';
+        timerContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        timerContainer.style.padding = '15px';
+        timerContainer.style.borderRadius = '10px';
         
         // 创建计时器显示
         const timerDisplay = document.createElement('div');
         timerDisplay.id = 'timerDisplay';
-        timerDisplay.style.fontSize = '24px';
+        timerDisplay.style.fontSize = '32px';
         timerDisplay.style.marginBottom = '10px';
         timerDisplay.style.color = '#ffffff';
+        timerDisplay.style.fontFamily = 'monospace';
         timerDisplay.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+        timerDisplay.textContent = '00:00.00';
         
         // 创建最佳成绩显示
         const bestTimeDisplay = document.createElement('div');
         bestTimeDisplay.id = 'bestTimeDisplay';
-        bestTimeDisplay.style.fontSize = '16px';
+        bestTimeDisplay.style.fontSize = '14px';
+        bestTimeDisplay.style.marginBottom = '15px';
         bestTimeDisplay.style.color = '#ffffff';
         bestTimeDisplay.style.textShadow = '1px 1px 2px rgba(0,0,0,0.5)';
         
-        // 创建控制按钮
-        const startButton = document.createElement('button');
-        startButton.textContent = '开始计时';
-        startButton.style.padding = '8px 16px';
-        startButton.style.margin = '5px';
-        startButton.style.cursor = 'pointer';
+        // 创建按钮容器
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.display = 'flex';
+        buttonContainer.style.gap = '10px';
+        buttonContainer.style.justifyContent = 'center';
         
+        // 创建开始/停止按钮
+        const toggleButton = document.createElement('button');
+        toggleButton.textContent = '开始计时';
+        toggleButton.style.padding = '8px 16px';
+        toggleButton.style.cursor = 'pointer';
+        toggleButton.style.backgroundColor = '#4CAF50';
+        toggleButton.style.color = 'white';
+        toggleButton.style.border = 'none';
+        toggleButton.style.borderRadius = '4px';
+        
+        // 创建重置按钮
         const resetButton = document.createElement('button');
-        resetButton.textContent = '重置计时';
+        resetButton.textContent = '重置';
         resetButton.style.padding = '8px 16px';
-        resetButton.style.margin = '5px';
         resetButton.style.cursor = 'pointer';
+        resetButton.style.backgroundColor = '#f44336';
+        resetButton.style.color = 'white';
+        resetButton.style.border = 'none';
+        resetButton.style.borderRadius = '4px';
         
         // 添加事件监听
-        startButton.addEventListener('click', () => this.toggleTimer());
-        resetButton.addEventListener('click', () => this.resetTimer());
+        toggleButton.addEventListener('click', () => {
+            this.toggleTimer();
+            toggleButton.textContent = this.isTimerRunning ? '停止计时' : '开始计时';
+            toggleButton.style.backgroundColor = this.isTimerRunning ? '#f44336' : '#4CAF50';
+        });
+        resetButton.addEventListener('click', () => {
+            this.resetTimer();
+            toggleButton.textContent = '开始计时';
+            toggleButton.style.backgroundColor = '#4CAF50';
+        });
         
         // 组装UI
+        buttonContainer.appendChild(toggleButton);
+        buttonContainer.appendChild(resetButton);
         timerContainer.appendChild(timerDisplay);
         timerContainer.appendChild(bestTimeDisplay);
-        timerContainer.appendChild(startButton);
-        timerContainer.appendChild(resetButton);
+        timerContainer.appendChild(buttonContainer);
         document.body.appendChild(timerContainer);
         
         // 更新显示
@@ -715,6 +768,38 @@ class RubiksCubeGame {
         }, 2000);
     }
     
+    // 生成打乱步骤
+    generateScramble() {
+        const moves = [];
+        const axes = ['x', 'y', 'z'];
+        const layers = [-1, 1];
+        const directions = [-1, 1];
+        
+        // 生成随机步骤
+        for (let i = 0; i < this.scrambleLength; i++) {
+            const axis = axes[Math.floor(Math.random() * axes.length)];
+            const layer = layers[Math.floor(Math.random() * layers.length)];
+            const direction = directions[Math.floor(Math.random() * directions.length)];
+            
+            // 避免连续两次旋转同一个面
+            if (i > 0) {
+                const lastMove = moves[moves.length - 1];
+                if (lastMove.axis === axis && lastMove.layer === layer) {
+                    i--; // 重新生成这一步
+                    continue;
+                }
+            }
+            
+            moves.push({
+                axis: axis,
+                layer: layer,
+                direction: direction
+            });
+        }
+        
+        return moves;
+    }
+
     // 修改打乱魔方方法
     scrambleCube() {
         if (this.isScrambling || this.isRotating) return;
@@ -726,28 +811,59 @@ class RubiksCubeGame {
         this.resetTimer();
         
         // 执行打乱
-        this.executeScramble(0, () => {
-            // 打乱完成后自动开始计时
-            this.startTimer();
-        });
+        this.executeScramble(0);
     }
     
-    // 修改执行打乱方法，添加回调
-    executeScramble(index, onComplete) {
+    // 修改执行打乱方法
+    executeScramble(index) {
         if (index >= this.scrambleMoves.length) {
             this.isScrambling = false;
-            if (onComplete) onComplete();
             return;
         }
         
         const move = this.scrambleMoves[index];
-        const piecesToRotate = this.getPiecesToRotate(move);
-        
-        this.animateRotation(piecesToRotate, move, () => {
-            setTimeout(() => {
-                this.executeScramble(index + 1, onComplete);
-            }, 100);
+        const piecesToRotate = this.cubePieces.filter(piece => {
+            const pos = piece.position;
+            switch (move.axis) {
+                case 'x': return Math.abs(pos.x - move.layer) < 0.1;
+                case 'y': return Math.abs(pos.y - move.layer) < 0.1;
+                case 'z': return Math.abs(pos.z - move.layer) < 0.1;
+                default: return false;
+            }
         });
+
+        // 直接更新块的位置，不使用动画
+        piecesToRotate.forEach(piece => {
+            const pos = piece.position.clone();
+            switch (move.axis) {
+                case 'x':
+                    if (move.layer === 1) {
+                        piece.position = new BABYLON.Vector3(pos.x, -pos.z, pos.y);
+                    } else {
+                        piece.position = new BABYLON.Vector3(pos.x, pos.z, -pos.y);
+                    }
+                    break;
+                case 'y':
+                    if (move.layer === 1) {
+                        piece.position = new BABYLON.Vector3(pos.z, pos.y, -pos.x);
+                    } else {
+                        piece.position = new BABYLON.Vector3(-pos.z, pos.y, pos.x);
+                    }
+                    break;
+                case 'z':
+                    if (move.layer === 1) {
+                        piece.position = new BABYLON.Vector3(-pos.y, pos.x, pos.z);
+                    } else {
+                        piece.position = new BABYLON.Vector3(pos.y, -pos.x, pos.z);
+                    }
+                    break;
+            }
+            // 重置旋转
+            piece.rotation = BABYLON.Vector3.Zero();
+        });
+        
+        // 立即执行下一步
+        this.executeScramble(index + 1);
     }
     
     // 创建统计信息UI
@@ -900,6 +1016,204 @@ class RubiksCubeGame {
     calculateAverage(times) {
         if (times.length === 0) return 0;
         return times.reduce((a, b) => a + b, 0) / times.length;
+    }
+
+    // 创建提示按钮
+    createHintButton() {
+        const button = document.createElement('button');
+        button.textContent = '显示提示';
+        button.style.position = 'absolute';
+        button.style.top = '20px';
+        button.style.left = '150px'; // 放在打乱按钮旁边
+        button.style.padding = '10px 20px';
+        button.style.fontSize = '16px';
+        button.style.cursor = 'pointer';
+        button.style.zIndex = '1000';
+        document.body.appendChild(button);
+        
+        button.addEventListener('click', () => {
+            if (!this.isRotating && !this.isScrambling) {
+                this.showHint();
+            }
+        });
+    }
+
+    // 显示提示
+    showHint() {
+        if (this.hintSystem.isActive) {
+            this.hideHint();
+            return;
+        }
+
+        // 创建提示容器
+        const hintContainer = document.createElement('div');
+        hintContainer.id = 'hintContainer';
+        hintContainer.style.position = 'absolute';
+        hintContainer.style.top = '80px';
+        hintContainer.style.left = '20px';
+        hintContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        hintContainer.style.padding = '15px';
+        hintContainer.style.borderRadius = '10px';
+        hintContainer.style.color = '#ffffff';
+        hintContainer.style.zIndex = '1000';
+        hintContainer.style.maxWidth = '300px';
+
+        // 创建提示内容
+        const hintContent = document.createElement('div');
+        hintContent.id = 'hintContent';
+        hintContent.style.marginBottom = '10px';
+
+        // 创建控制按钮
+        const nextButton = document.createElement('button');
+        nextButton.textContent = '下一步';
+        nextButton.style.marginRight = '10px';
+        nextButton.style.padding = '5px 10px';
+        nextButton.style.cursor = 'pointer';
+
+        const closeButton = document.createElement('button');
+        closeButton.textContent = '关闭';
+        closeButton.style.padding = '5px 10px';
+        closeButton.style.cursor = 'pointer';
+
+        // 添加事件监听
+        nextButton.addEventListener('click', () => this.nextHint());
+        closeButton.addEventListener('click', () => this.hideHint());
+
+        // 组装UI
+        hintContainer.appendChild(hintContent);
+        hintContainer.appendChild(nextButton);
+        hintContainer.appendChild(closeButton);
+        document.body.appendChild(hintContainer);
+
+        // 生成提示步骤
+        this.generateHintSteps();
+        this.updateHintDisplay();
+
+        this.hintSystem.isActive = true;
+    }
+
+    // 隐藏提示
+    hideHint() {
+        const container = document.getElementById('hintContainer');
+        if (container) {
+            container.remove();
+            this.hintSystem.isActive = false;
+            this.hintSystem.currentStep = 0;
+        }
+    }
+
+    // 生成提示步骤
+    generateHintSteps() {
+        this.hintSystem.steps = [
+            {
+                text: "首先，让我们完成白色十字。将白色边块移动到顶面，使其与中心块对齐。",
+                action: () => this.highlightWhiteCross()
+            },
+            {
+                text: "接下来，完成白色角块。将白色角块移动到正确的位置。",
+                action: () => this.highlightWhiteCorners()
+            },
+            {
+                text: "现在，完成中间层。将边块移动到正确的位置。",
+                action: () => this.highlightMiddleLayer()
+            },
+            {
+                text: "然后，完成顶层十字。将黄色边块移动到正确的位置。",
+                action: () => this.highlightYellowCross()
+            },
+            {
+                text: "最后，完成顶层角块。将黄色角块移动到正确的位置。",
+                action: () => this.highlightYellowCorners()
+            }
+        ];
+    }
+
+    // 更新提示显示
+    updateHintDisplay() {
+        const hintContent = document.getElementById('hintContent');
+        if (hintContent && this.hintSystem.steps[this.hintSystem.currentStep]) {
+            hintContent.textContent = this.hintSystem.steps[this.hintSystem.currentStep].text;
+            this.hintSystem.steps[this.hintSystem.currentStep].action();
+        }
+    }
+
+    // 下一步提示
+    nextHint() {
+        if (this.hintSystem.currentStep < this.hintSystem.steps.length - 1) {
+            this.hintSystem.currentStep++;
+            this.updateHintDisplay();
+        } else {
+            this.hideHint();
+        }
+    }
+
+    // 高亮白色十字
+    highlightWhiteCross() {
+        this.clearHighlights();
+        this.cubePieces.forEach(piece => {
+            const pos = piece.position;
+            if (Math.abs(pos.y - 1) < 0.1 && piece.material.diffuseColor.r === 1 && piece.material.diffuseColor.g === 1) {
+                this.highlightPiece(piece);
+            }
+        });
+    }
+
+    // 高亮白色角块
+    highlightWhiteCorners() {
+        this.clearHighlights();
+        this.cubePieces.forEach(piece => {
+            const pos = piece.position;
+            if (Math.abs(pos.y - 1) < 0.1 && Math.abs(Math.abs(pos.x) - 1) < 0.1 && Math.abs(Math.abs(pos.z) - 1) < 0.1) {
+                this.highlightPiece(piece);
+            }
+        });
+    }
+
+    // 高亮中间层
+    highlightMiddleLayer() {
+        this.clearHighlights();
+        this.cubePieces.forEach(piece => {
+            const pos = piece.position;
+            if (Math.abs(pos.y) < 0.1) {
+                this.highlightPiece(piece);
+            }
+        });
+    }
+
+    // 高亮黄色十字
+    highlightYellowCross() {
+        this.clearHighlights();
+        this.cubePieces.forEach(piece => {
+            const pos = piece.position;
+            if (Math.abs(pos.y + 1) < 0.1 && piece.material.diffuseColor.r === 1 && piece.material.diffuseColor.g === 1) {
+                this.highlightPiece(piece);
+            }
+        });
+    }
+
+    // 高亮黄色角块
+    highlightYellowCorners() {
+        this.clearHighlights();
+        this.cubePieces.forEach(piece => {
+            const pos = piece.position;
+            if (Math.abs(pos.y + 1) < 0.1 && Math.abs(Math.abs(pos.x) - 1) < 0.1 && Math.abs(Math.abs(pos.z) - 1) < 0.1) {
+                this.highlightPiece(piece);
+            }
+        });
+    }
+
+    // 高亮单个块
+    highlightPiece(piece) {
+        const highlightMaterial = new BABYLON.StandardMaterial("highlight", this.scene);
+        highlightMaterial.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+        piece.material = highlightMaterial;
+    }
+
+    // 清除所有高亮
+    clearHighlights() {
+        this.cubePieces.forEach(piece => {
+            this.applyOriginalMaterials(piece);
+        });
     }
 }
 
